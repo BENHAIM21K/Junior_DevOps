@@ -59,9 +59,11 @@ workflows:
       - deploy_sam:
           filters:
             branches:
-              only: main
+              only: main  # Trigger on merge to main
 
       - apply_terraform:
+          requires:
+            - deploy_sam
           filters:
             branches:
               only: main
