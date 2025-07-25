@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless RDS Cluster Automation
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.12
+    MemorySize: 256
+Resources:
+  ProvisionRdsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: rds-provisioning-topic
+  ProvisionRdsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: rds-provisioning-queue
+  ProvisionRdsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn:
+        Ref: ProvisionRdsTopic
+      Protocol: sqs
+      Endpoint:
+        Fn::GetAtt:
+        - ProvisionRdsQueue
+        - Arn
+  ProvisionRdsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: ProvisionRdsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action: sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - ProvisionRdsQueue
+            - Arn
+          Condition:
+            ArnEquals:
+              aws:SourceArn:
+                Ref: ProvisionRdsTopic
+  RdsProvisionerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: rds-provisioner
+      Handler: handler.lambda_handler
+      CodeUri: RdsProvisionerFunction
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - ProvisionRdsQueue
+              - Arn
+      Environment:
+        Variables:
+          GITHUB_TOKEN: '{{resolve:secretsmanager:github/token:SecretString:token}}'
+          GITHUB_REPO: BENHAIM21K/Junior_DevOps
+      Policies:
+      - SQSPollerPolicy:
+          QueueName:
+            Ref: ProvisionRdsQueue
+      - AWSSecretsManagerGetSecretValuePolicy:
+          SecretArn: arn:aws:secretsmanager:us-east-1:381492296048:secret:github/token-ZNw2C4
+      - AWSSecretsManagerGetSecretValuePolicy:
+          SecretArn: arn:aws:secretsmanager:us-east-1:381492296048:secret:rds/credentials-VOhdkN
+      - Statement:
+          Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: '*'
+    Metadata:
+      SamResourceId: RdsProvisionerFunction
+Outputs:
+  ApiEndpoint:
+    Description: Use this SNS Topic ARN to send RDS requests
+    Value:
+      Ref: ProvisionRdsTopic

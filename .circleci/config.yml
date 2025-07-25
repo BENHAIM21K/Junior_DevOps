@@ -44,7 +44,7 @@ jobs:
           path: terraform/rds_module
       - terraform/apply:
           path: terraform/rds_module
-          auto_approve: true
+          skip_approval: true
 
 workflows:
   deploy-and-provision:
