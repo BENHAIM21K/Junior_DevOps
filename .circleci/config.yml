@@ -64,6 +64,3 @@ workflows:
       - apply_terraform:
           requires:
             - deploy_sam
-          filters:
-            branches:
-              only: main
