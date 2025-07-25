@@ -2,7 +2,6 @@ version: 2.1
 
 orbs:
   aws-sam: circleci/aws-sam-serverless@1.0.0
-  terraform: circleci/terraform@3.2.1
 
 jobs:
   deploy_sam:
