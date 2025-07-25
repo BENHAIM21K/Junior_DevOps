@@ -38,13 +38,21 @@ jobs:
       - image: cimg/base:stable
     steps:
       - checkout
-      - terraform/init:
-          path: terraform/rds_module
-      - terraform/plan:
-          path: terraform/rds_module
-      - terraform/apply:
-          path: terraform/rds_module
-          skip_approval: true
+      - run:
+          name: Terraform Init
+          command: |
+            cd terraform/rds_module
+            terraform init
+      - run:
+          name: Terraform Plan
+          command: |
+            cd terraform/rds_module
+            terraform plan
+      - run:
+          name: Terraform Apply
+          command: |
+            cd terraform/rds_module
+            terraform apply -auto-approve
 
 workflows:
   deploy-and-provision:
