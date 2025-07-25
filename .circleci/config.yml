@@ -1,0 +1,60 @@
+version: 2.1
+
+orbs:
+  aws-sam: circleci/aws-sam-serverless@1.0.0
+  terraform: circleci/terraform@3.2.1
+
+jobs:
+  deploy_sam:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Install AWS CLI
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y awscli
+      - run:
+          name: Install SAM CLI
+          command: |
+            pip install aws-sam-cli
+      - run:
+          name: Build SAM
+          command: |
+            cd sam
+            sam build
+      - run:
+          name: Deploy SAM
+          command: |
+            cd sam
+            sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name rds-sam-stack \
+              --region us-east-1 \
+              --capabilities CAPABILITY_IAM \
+              --resolve-s3
+
+  apply_terraform:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - terraform/init:
+          path: terraform/rds_module
+      - terraform/plan:
+          path: terraform/rds_module
+      - terraform/apply:
+          path: terraform/rds_module
+          auto_approve: true
+
+workflows:
+  deploy-and-provision:
+    jobs:
+      - deploy_sam:
+          filters:
+            branches:
+              only: main
+
+      - apply_terraform:
+          filters:
+            branches:
+              only: main
