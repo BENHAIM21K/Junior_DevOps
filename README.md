@@ -29,7 +29,7 @@ graph TD
 
 - **API Gateway** – Receives incoming POST requests
 - **SNS + SQS** – Event fan-out and queuing mechanism
-- **Lambda** – Processes events and triggers GitHub PRs
+- **Lambda** – Proceses events and triggers GitHub PRs
 - **GitHub** – Stores Terraform code, triggers CircleCI
 - **CircleCI** – CI/CD runner for SAM and Terraform
 - **Terraform** – Provisions AWS RDS based on JSON input
