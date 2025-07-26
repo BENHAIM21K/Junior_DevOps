@@ -1,6 +1,6 @@
 
 variable "db_name" {
-  default = "customers"
+  default = "helloWorld"
 }
 
 variable "engine" {
