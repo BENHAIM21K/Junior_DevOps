@@ -9,22 +9,26 @@ jobs:
       - image: cimg/python:3.12
     steps:
       - checkout
+
       - run:
           name: Install AWS CLI
           command: |
             sudo apt-get update
             sudo apt-get install -y awscli
+
       - run:
           name: Install SAM CLI
           command: |
             pip install aws-sam-cli
+
       - run:
-          name: Build SAM
+          name: Build SAM App
           command: |
             cd sam
             sam build
+
       - run:
-          name: Deploy SAM
+          name: Deploy SAM Stack
           command: |
             cd sam
             sam deploy \
@@ -40,16 +44,19 @@ jobs:
       - image: hashicorp/terraform:1.5.7
     steps:
       - checkout
+
       - run:
           name: Terraform Init
           command: |
             cd terraform/rds_module
             terraform init
+
       - run:
           name: Terraform Plan
           command: |
             cd terraform/rds_module
             terraform plan
+
       - run:
           name: Terraform Apply
           command: |
@@ -62,11 +69,11 @@ workflows:
       - deploy_sam:
           filters:
             branches:
-              only: main  # Trigger only on main PR merge
+              only: main  # Only when a PR is merged to main
 
       - apply_terraform:
           requires:
             - deploy_sam
           filters:
             branches:
-              only: main
+              only: main  # Run Terraform only after SAM deploy, when on main

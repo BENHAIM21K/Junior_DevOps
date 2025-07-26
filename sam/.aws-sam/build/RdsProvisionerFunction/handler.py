@@ -1,19 +1,15 @@
 import json
 import boto3
 import os
-import subprocess
 import tempfile
 import uuid
-from github import Github
+from github import Github, InputGitAuthor
 
 def lambda_handler(event, context):
     print("Received event:", json.dumps(event))
 
-    # Get message from SQS
+    # Step 1: Extract and unwrap SQS message (SNS inside SQS)
     message = json.loads(event['Records'][0]['body'])
-    print("Raw SQS Message:", message)
-
-    # If the message came from SNS, unwrap it
     if 'Message' in message:
         message = json.loads(message['Message'])
 
@@ -23,25 +19,22 @@ def lambda_handler(event, context):
 
     github_token = os.environ['GITHUB_TOKEN']
     repo_name = os.environ['GITHUB_REPO']
-
-    # Setup Git
     github = Github(github_token)
     repo = github.get_repo(repo_name)
-    branch_name = f"provision-{db_name}-{uuid.uuid4().hex[:6]}"
+
     base_branch = "main"
+    unique_suffix = uuid.uuid4().hex[:6]
+    new_branch_name = f"provision-{db_name}-{unique_suffix}"
 
-    # Clone the repo into temp dir
-    with tempfile.TemporaryDirectory() as tempdir:
-        repo_url = f"https://{github_token}@github.com/{repo_name}.git"
-        subprocess.run(["git", "clone", "--branch", base_branch, repo_url, tempdir], check=True)
+    # Step 2: Get SHA of the base branch
+    base = repo.get_branch(base_branch)
+    base_sha = base.commit.sha
 
-        # Create a new branch
-        subprocess.run(["git", "-C", tempdir, "checkout", "-b", branch_name], check=True)
+    # Step 3: Create a new branch from base
+    repo.create_git_ref(ref=f"refs/heads/{new_branch_name}", sha=base_sha)
 
-        # Write the Terraform file
-        terraform_path = os.path.join(tempdir, "terraform", "rds_module", "main.tf")
-        with open(terraform_path, "w") as tf:
-            tf.write(f'''
+    # Step 4: Define Terraform content
+    terraform_code = f'''
 variable "db_name" {{
   default = "{db_name}"
 }}
@@ -65,24 +58,41 @@ module "rds" {{
   env              = var.env
   db_secret_name   = var.db_secret_name
 }}
-''')
+'''
 
-        # Commit and push
-        subprocess.run(["git", "-C", tempdir, "add", "."], check=True)
-        subprocess.run(["git", "-C", tempdir, "commit", "-m", f"Add RDS cluster for {db_name}"], check=True)
-        subprocess.run(["git", "-C", tempdir, "push", "--set-upstream", "origin", branch_name], check=True)
+    # Step 5: Path to update in the repo
+    tf_path = "terraform/rds_module/main.tf"
 
-    # Create the pull request
+    # Step 6: Read current file SHA (if exists)
+    try:
+        existing_file = repo.get_contents(tf_path, ref=base_branch)
+        repo.update_file(
+            path=tf_path,
+            message=f"Update RDS provisioning for {db_name}",
+            content=terraform_code,
+            sha=existing_file.sha,
+            branch=new_branch_name,
+        )
+    except:
+        # If file doesn't exist yet, create it
+        repo.create_file(
+            path=tf_path,
+            message=f"Create RDS provisioning for {db_name}",
+            content=terraform_code,
+            branch=new_branch_name,
+        )
+
+    # Step 7: Open PR
     pr = repo.create_pull(
         title=f"Provision RDS cluster: {db_name}",
-        body=f"Provisioning request for `{db_name}` ({engine}, {env})",
-        head=branch_name,
-        base=base_branch
+        body=f"Auto-generated PR to provision RDS cluster with engine `{engine}` in `{env}` environment.",
+        head=new_branch_name,
+        base=base_branch,
     )
 
     print(f"Pull request created: {pr.html_url}")
 
     return {
-        'statusCode': 200,
-        'body': json.dumps(f"PR created: {pr.html_url}")
+        "statusCode": 200,
+        "body": json.dumps({"pr_url": pr.html_url})
     }

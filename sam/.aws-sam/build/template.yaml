@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Serverless RDS Cluster Automation
+Description: "API Gateway \u2192 SNS \u2192 SQS \u2192 Lambda - Secure Serverless\
+  \ RDS Provisioning"
 Globals:
   Function:
     Timeout: 30
@@ -25,6 +26,7 @@ Resources:
         Fn::GetAtt:
         - ProvisionRdsQueue
         - Arn
+      RawMessageDelivery: true
   ProvisionRdsQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
@@ -34,7 +36,8 @@ Resources:
         Version: '2012-10-17'
         Statement:
         - Effect: Allow
-          Principal: '*'
+          Principal:
+            Service: sns.amazonaws.com
           Action: sqs:SendMessage
           Resource:
             Fn::GetAtt:
@@ -79,8 +82,100 @@ Resources:
           Resource: '*'
     Metadata:
       SamResourceId: RdsProvisionerFunction
+  ApiGatewaySnsPublishRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ApiGatewaySnsPublishRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: apigateway.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: PublishToProvisionRdsTopic
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: sns:Publish
+            Resource:
+              Ref: ProvisionRdsTopic
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/apigateway/${AWS::StackName}-access
+      RetentionInDays: 7
+  RdsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: rds-api
+      StageName: Prod
+      MethodSettings:
+      - ResourcePath: /*
+        HttpMethod: '*'
+        LoggingLevel: INFO
+        DataTraceEnabled: true
+      AccessLogSetting:
+        DestinationArn:
+          Fn::GetAtt:
+          - ApiGatewayLogGroup
+          - Arn
+        Format: '{"requestId":"$context.requestId","status":"$context.status","error":"$context.error.message"}'
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: RDS Provisioning API
+          version: '1.0'
+        paths:
+          /rds:
+            post:
+              summary: Send RDS provisioning request
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: Message sent to SNS
+                '500':
+                  description: Internal server error
+              x-amazon-apigateway-integration:
+                type: aws
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:sns:action/Publish
+                httpMethod: POST
+                credentials:
+                  Fn::GetAtt: ApiGatewaySnsPublishRole.Arn
+                requestParameters:
+                  integration.request.header.Content-Type: '''application/x-www-form-urlencoded'''
+                requestTemplates:
+                  application/json:
+                    Fn::Sub:
+                    - 'Action=Publish&TopicArn=$util.urlEncode(''${TopicArn}'')&Message=$util.urlEncode($input.body)
+
+                      '
+                    - TopicArn:
+                        Ref: ProvisionRdsTopic
+                responses:
+                  default:
+                    statusCode: '200'
+                  .*[Ee]rror.*:
+                    statusCode: '500'
 Outputs:
-  ApiEndpoint:
-    Description: Use this SNS Topic ARN to send RDS requests
+  ApiUrl:
+    Description: Endpoint to send RDS provisioning requests
+    Value:
+      Fn::Sub: https://${RdsApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/rds
+  SnsTopicArn:
+    Description: SNS Topic used to fan out RDS provisioning requests
     Value:
       Ref: ProvisionRdsTopic
+  SqsQueueArn:
+    Description: SQS Queue that receives messages from SNS
+    Value:
+      Fn::GetAtt:
+      - ProvisionRdsQueue
+      - Arn
