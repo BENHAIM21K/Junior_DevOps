@@ -1,14 +1,14 @@
 
 variable "db_name" {
-  default = "testdb123"
+  default = "customers"
 }
 
 variable "engine" {
-  default = "mysql"
+  default = "postgres"
 }
 
 variable "env" {
-  default = "dev"
+  default = "prod"
 }
 
 variable "db_secret_name" {
