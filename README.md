@@ -48,18 +48,13 @@ graph TD
 }
 ```
 
-> 🔒 Credentials are securely fetched from AWS Secrets Manager:  
-> `arn:aws:secretsmanager:us-east-1:381492296048:secret:rds/credentials-VOhdkN`
-
----
-
 ## ⚙️ Setup Instructions
 
 ### 1. 🧑‍💻 Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/serverless-rds-pipeline.git
-cd serverless-rds-pipeline
+git clone https://github.com/BENHAIM21K/Junior_DevOps
+cd Junior_DevOps
 ```
 
 ### 2. 🔐 Disable AWS Access Keys (IMPORTANT)
